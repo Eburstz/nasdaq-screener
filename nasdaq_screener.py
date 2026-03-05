@@ -42,10 +42,10 @@ DELAY_BETWEEN_BATCHES = 1  # Seconds between batches
 # ─── TIMEFRAMES ──────────────────────────────────────────────────────────────
 # Each timeframe: (label, yfinance_interval, yfinance_period_or_days, min_bars_needed)
 TIMEFRAMES = [
-    ("4H",      "1h",  60,   200),   # 4H built from 1h data (60 days of 1h ≈ lots of 4H bars)
+    ("4H",      "1h",  729,  50),    # 4H built from 1h data (729 days max for yfinance 1h)
     ("Daily",   "1d",  400,  200),
-    ("Weekly",  "1wk", 1200, 200),
-    ("Monthly", "1mo", 3600, 50),
+    ("Weekly",  "1wk", 2000, 100),
+    ("Monthly", "1mo", 3600, 36),
 ]
 
 # ─── SECTOR TICKER LISTS ─────────────────────────────────────────────────────
@@ -207,8 +207,8 @@ def detect_ma_crossover(ma_short, ma_long, dates, window=5):
 
 
 # ─── ANALYSIS ─────────────────────────────────────────────────────────────────
-def analyze_ticker(ticker, hist):
-    if hist is None or len(hist) < 200:
+def analyze_ticker(ticker, hist, min_bars=200):
+    if hist is None or len(hist) < min_bars:
         return None
     close = hist['Close']
     dates = hist.index
@@ -336,7 +336,7 @@ def download_and_analyze(tickers, label="All NASDAQ", interval="1d", lookback_da
                         hist = resample_to_4h(hist)
                     if len(hist) < min_bars:
                         continue
-                    result = analyze_ticker(ticker, hist)
+                    result = analyze_ticker(ticker, hist, min_bars=min_bars)
                     if result:
                         result['timeframe'] = timeframe_label
                         results.append(result)
