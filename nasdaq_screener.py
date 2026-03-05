@@ -545,7 +545,7 @@ function signalClass(val) {{
 }}
 
 function tvLink(ticker) {{
-  return `https://www.tradingview.com/chart/?symbol=NASDAQ:${{ticker}}`;
+  return `https://www.tradingview.com/chart/?symbol=${{ticker}}`;
 }}
 
 function ratingClass(rating) {{
@@ -737,7 +737,7 @@ def send_email_alerts(results, output_dir):
         for r in strong_buys:
             tf = r.get('timeframe', 'Daily')
             ticker = r['ticker']
-            tv_url = f"https://www.tradingview.com/chart/?symbol=NASDAQ:{ticker}"
+            tv_url = f"https://www.tradingview.com/chart/?symbol={ticker}"
             body_lines.append(
                 f"<li><b>{ticker}</b> ({tf}) — {r['rating']} (score: {r.get('score', 0):.1f}) "
                 f"| Price: ${r.get('last_close', 0):.2f} "
@@ -750,7 +750,7 @@ def send_email_alerts(results, output_dir):
         for r in strong_sells:
             tf = r.get('timeframe', 'Daily')
             ticker = r['ticker']
-            tv_url = f"https://www.tradingview.com/chart/?symbol=NASDAQ:{ticker}"
+            tv_url = f"https://www.tradingview.com/chart/?symbol={ticker}"
             body_lines.append(
                 f"<li><b>{ticker}</b> ({tf}) — {r['rating']} (score: {r.get('score', 0):.1f}) "
                 f"| Price: ${r.get('last_close', 0):.2f} "
