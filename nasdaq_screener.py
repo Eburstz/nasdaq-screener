@@ -106,23 +106,44 @@ for t in ASCHENBRENNER_TICKERS:
 
 
 # ─── NASDAQ 100 TICKERS ──────────────────────────────────────────────────────
-NASDAQ_100 = [
+# Fallback list — used only if live fetch fails
+NASDAQ_100_FALLBACK = [
     "AAPL", "ABNB", "ADBE", "ADI", "ADP", "ADSK", "AEP", "AMAT", "AMGN", "AMZN",
     "ANSS", "APP", "ARM", "ASML", "AVGO", "AXON", "AZN", "BIIB", "BKNG", "BKR",
     "CCEP", "CDNS", "CDW", "CEG", "CHTR", "CMCSA", "COIN", "COST", "CPRT", "CRWD",
-    "CSCO", "CTAS", "CTSH", "DASH", "DDOG", "DLTR", "DXCM", "EA", "EXC", "FANG",
-    "FAST", "FTNT", "GEHC", "GILD", "GOOG", "GOOGL", "GFS", "HON", "IDXX", "ILMN",
-    "INTC", "INTU", "ISRG", "KDP", "KHC", "KLAC", "LIN", "LRCX", "LULU", "MAR",
-    "MCHP", "MDB", "MDLZ", "MELI", "META", "MNST", "MRVL", "MSFT", "MU", "NFLX",
-    "NVDA", "NXPI", "ODFL", "ON", "ORLY", "PANW", "PAYX", "PCAR", "PDD", "PEP",
-    "PLTR", "PYPL", "QCOM", "REGN", "ROST", "SBUX", "SMCI", "SNPS", "TEAM", "TOST",
-    "TSLA", "TTD", "TTWO", "TXN", "VRSK", "VRTX", "WBD", "WDAY", "XEL", "ZS",
+    "CRDO", "CSCO", "CTAS", "CTSH", "DASH", "DDOG", "DLTR", "DXCM", "EA", "EXC",
+    "FANG", "FAST", "FICO", "FTNT", "GEHC", "GILD", "GOOG", "GOOGL", "GFS", "GRAB",
+    "HON", "IDXX", "ILMN", "INTC", "INTU", "ISRG", "KDP", "KHC", "KLAC", "LIN",
+    "LRCX", "LULU", "MAR", "MCHP", "MDB", "MDLZ", "MELI", "META", "MNST", "MRVL",
+    "MSFT", "MSTR", "MU", "NFLX", "NVDA", "NXPI", "ODFL", "ON", "ORLY", "PANW",
+    "PAYX", "PCAR", "PDD", "PEP", "PLTR", "PYPL", "QCOM", "REGN", "ROST", "SBUX",
+    "SMCI", "SNPS", "TEAM", "TOST", "TSLA", "TTD", "TTWO", "TXN", "VRSK", "VRTX",
+    "WBD", "WDAY", "XEL", "ZS",
 ]
 
 def get_nasdaq_tickers():
-    """Return NASDAQ 100 index tickers."""
-    print(f"Using NASDAQ 100 ({len(NASDAQ_100)} tickers)")
-    return list(NASDAQ_100)
+    """Fetch current NASDAQ 100 tickers dynamically, fall back to hardcoded list."""
+    print("Fetching NASDAQ 100 ticker list...")
+    # Try fetching from Wikipedia's NDX page
+    try:
+        import urllib.request, re
+        url = "https://en.wikipedia.org/wiki/Nasdaq-100"
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            html = resp.read().decode('utf-8')
+        # Wikipedia has ticker symbols as links: Nasdaq: AAPL or in table cells
+        tickers = re.findall(r'(?:NASDAQ|Nasdaq):\s*([A-Z]{1,5})', html)
+        if not tickers:
+            tickers = re.findall(r'<td[^>]*>\s*<a[^>]*>([A-Z]{1,5})</a>\s*</td>', html)
+        tickers = list(dict.fromkeys(tickers))  # dedupe, preserve order
+        if len(tickers) >= 95:  # Sanity check: NDX should have ~101 symbols
+            print(f"  Found {len(tickers)} NASDAQ 100 tickers (live)")
+            return tickers
+    except Exception as e:
+        print(f"  Live fetch failed ({e})")
+
+    print(f"  Using fallback list ({len(NASDAQ_100_FALLBACK)} tickers)")
+    return list(NASDAQ_100_FALLBACK)
 
 
 # ─── TECHNICAL INDICATORS ────────────────────────────────────────────────────
