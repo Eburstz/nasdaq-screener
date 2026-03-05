@@ -10,7 +10,7 @@ Signals:
 3. RSI divergence (bullish below 30, bearish above 70)
 4. Combined: MA50/MA150 crossover + RSI divergence
 
-Sector filters: Renewable Energy, Nuclear Energy, AI companies
+Sector filters: Renewable Energy, Nuclear Energy, AI, Aschenbrenner AI Infrastructure
 
 Usage:
   python3 nasdaq_screener.py
@@ -64,6 +64,27 @@ AI_TICKERS = [
     "NXPI", "ON", "MPWR", "MBLY", "LAZR", "INVZ", "LIDR",
 ]
 
+# Leopold Aschenbrenner AI Infrastructure Portfolio
+# Thesis: AI compute explosion → chips + power + data centers = bottlenecks
+ASCHENBRENNER_TICKERS = [
+    # AI Chips / Semiconductors
+    "INTC", "AVGO", "NVDA", "TSM", "MU", "TSEM",
+    # Optical Networking (data-center connectivity)
+    "COHR", "LITE", "AAOI", "CIEN", "ANET",
+    # Data Center Hardware
+    "SMCI", "DELL", "WDC",
+    # Data Center Operators / GPU Cloud
+    "CORZ", "EQIX", "DLR",
+    # AI Power & Energy
+    "BE", "CEG", "NEE", "VST", "NRG",
+    # Power Infrastructure (transformers, switchgear)
+    "ETN", "VRT", "NVT", "GEV",
+    # Bitcoin Miners → AI Compute Pivot
+    "CIFR", "RIOT", "MARA", "HUT", "IREN",
+    # Small/Mid-Cap AI Infrastructure
+    "CRDO", "MTSI", "SITM", "POET",
+]
+
 SECTOR_MAP = {}
 for t in RENEWABLE_ENERGY_TICKERS:
     SECTOR_MAP.setdefault(t, []).append("Renewable")
@@ -71,6 +92,8 @@ for t in NUCLEAR_ENERGY_TICKERS:
     SECTOR_MAP.setdefault(t, []).append("Nuclear")
 for t in AI_TICKERS:
     SECTOR_MAP.setdefault(t, []).append("AI")
+for t in ASCHENBRENNER_TICKERS:
+    SECTOR_MAP.setdefault(t, []).append("Aschenbrenner")
 
 
 # ─── TICKER LIST ──────────────────────────────────────────────────────────────
@@ -317,6 +340,7 @@ def build_html_dashboard(all_results, output_path):
   .sector-Renewable {{ color: var(--green); border-color: var(--green); }}
   .sector-Nuclear {{ color: var(--yellow); border-color: var(--yellow); }}
   .sector-AI {{ color: var(--accent); border-color: var(--accent); }}
+  .sector-Aschenbrenner {{ color: #f0883e; border-color: #f0883e; }}
 
   .empty {{ text-align: center; padding: 40px; color: var(--muted); }}
   .count {{ color: var(--muted); font-size: 0.85em; margin-bottom: 12px; }}
@@ -359,6 +383,7 @@ def build_html_dashboard(all_results, output_path):
       <option value="Renewable">Renewable Energy</option>
       <option value="Nuclear">Nuclear Energy</option>
       <option value="AI">AI Companies</option>
+      <option value="Aschenbrenner">Aschenbrenner Portfolio</option>
     </select>
   </div>
   <div class="filter-group">
@@ -524,7 +549,8 @@ def main():
     already = {r['ticker'] for r in all_results}
     for extra_list, label in [(RENEWABLE_ENERGY_TICKERS, "Renewable"),
                               (NUCLEAR_ENERGY_TICKERS, "Nuclear"),
-                              (AI_TICKERS, "AI")]:
+                              (AI_TICKERS, "AI"),
+                              (ASCHENBRENNER_TICKERS, "Aschenbrenner")]:
         missing = [t for t in extra_list if t not in already]
         if missing:
             extra = download_and_analyze(missing, f"{label} (extra)")

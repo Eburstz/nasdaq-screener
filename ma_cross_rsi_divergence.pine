@@ -1,0 +1,103 @@
+//@version=5
+indicator("MA Cross + RSI Divergence PRO", overlay=true)
+
+// ===== INPUTS =====
+ma20Length     = input.int(20,  "MA 20 Length")
+ma50Length     = input.int(50,  "MA 50 Length")
+ma150Length    = input.int(150, "MA 150 Length")
+rsiLength      = input.int(14,  "RSI Length")
+pivotLen       = input.int(5,   "Pivot Length")
+lookbackBars   = input.int(10,  "Combo Lookback Bars")
+
+// ===== MOVING AVERAGES =====
+ma20  = ta.sma(close, ma20Length)
+ma50  = ta.sma(close, ma50Length)
+ma150 = ta.sma(close, ma150Length)
+
+plot(ma20,  color=color.blue,   title="MA 20")
+plot(ma50,  color=color.orange, title="MA 50")
+plot(ma150, color=color.red,    title="MA 150")
+
+// ===== CROSS CONDITIONS =====
+bullCross20_50 = ta.crossover(ma20, ma50)
+bearCross20_50 = ta.crossunder(ma20, ma50)
+
+bullCross50_150 = ta.crossover(ma50, ma150)
+bearCross50_150 = ta.crossunder(ma50, ma150)
+
+// ===== RSI =====
+rsi = ta.rsi(close, rsiLength)
+
+// ===== DIVERGENCE =====
+priceHigh = ta.pivothigh(high, pivotLen, pivotLen)
+priceLow  = ta.pivotlow(low, pivotLen, pivotLen)
+
+rsiHigh = ta.pivothigh(rsi, pivotLen, pivotLen)
+rsiLow  = ta.pivotlow(rsi, pivotLen, pivotLen)
+
+var float prevPriceHigh = na
+var float prevRsiHigh   = na
+var float prevPriceLow  = na
+var float prevRsiLow    = na
+
+bearDiv = false
+if not na(priceHigh) and not na(rsiHigh)
+    if not na(prevPriceHigh) and not na(prevRsiHigh)
+        bearDiv := priceHigh > prevPriceHigh and rsiHigh < prevRsiHigh
+    prevPriceHigh := priceHigh
+    prevRsiHigh   := rsiHigh
+
+bullDiv = false
+if not na(priceLow) and not na(rsiLow)
+    if not na(prevPriceLow) and not na(prevRsiLow)
+        bullDiv := priceLow < prevPriceLow and rsiLow > prevRsiLow
+    prevPriceLow := priceLow
+    prevRsiLow   := rsiLow
+
+// ===== SAFE LOOKBACK LOGIC =====
+barsSinceBullDiv = ta.barssince(bullDiv)
+barsSinceBearDiv = ta.barssince(bearDiv)
+
+recentBullDiv = not na(barsSinceBullDiv) and barsSinceBullDiv <= lookbackBars
+recentBearDiv = not na(barsSinceBearDiv) and barsSinceBearDiv <= lookbackBars
+
+// ===== COMBO =====
+bullCombo = bullCross20_50 and recentBullDiv
+bearCombo = bearCross20_50 and recentBearDiv
+
+// ===== PLOTS =====
+
+// 20 / 50 crosses
+plotshape(bullCross20_50, location=location.belowbar,
+     style=shape.triangleup, size=size.small, color=color.green, title="20/50 Bull")
+
+plotshape(bearCross20_50, location=location.abovebar,
+     style=shape.triangledown, size=size.small, color=color.red, title="20/50 Bear")
+
+// 50 / 150 crosses
+plotshape(bullCross50_150, location=location.belowbar,
+     style=shape.circle, size=size.small, color=color.lime, title="50/150 Bull")
+
+plotshape(bearCross50_150, location=location.abovebar,
+     style=shape.circle, size=size.small, color=color.maroon, title="50/150 Bear")
+
+// Divergence
+plotshape(bullDiv, location=location.belowbar,
+     style=shape.labelup, text="Bull Div", color=color.aqua)
+
+plotshape(bearDiv, location=location.abovebar,
+     style=shape.labeldown, text="Bear Div", color=color.fuchsia)
+
+// COMBO SIGNAL (Diamond = special event)
+plotshape(bullCombo, location=location.belowbar,
+     style=shape.diamond, size=size.large, color=color.yellow, title="BULL COMBO")
+
+plotshape(bearCombo, location=location.abovebar,
+     style=shape.diamond, size=size.large, color=color.yellow, title="BEAR COMBO")
+
+// ===== ALERTS =====
+alertcondition(bullCombo, title="Bull Combo Alert",
+     message="Bullish MA Cross + Recent RSI Divergence")
+
+alertcondition(bearCombo, title="Bear Combo Alert",
+     message="Bearish MA Cross + Recent RSI Divergence")
