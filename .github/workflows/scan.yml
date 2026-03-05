@@ -1,8 +1,11 @@
 name: NASDAQ 100 Screener
 
 on:
-  # Run daily at 9:30 PM UTC (4:30 PM ET — 30 min after market close)
+  # Run twice daily on weekdays:
+  # 1) 1:00 PM UTC = 8:00 AM ET = ~3:00 PM Israel — 90 min before market open
+  # 2) 9:30 PM UTC = 4:30 PM ET — 30 min after market close
   schedule:
+    - cron: '0 13 * * 1-5'
     - cron: '30 21 * * 1-5'
 
   # Allow manual trigger from GitHub UI
