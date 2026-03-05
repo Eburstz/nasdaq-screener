@@ -233,6 +233,57 @@ def analyze_ticker(ticker, hist):
         if days_apart <= COMBO_WINDOW:
             result['combined_signal'] = f"{cross_50_150[0]} + {div[0]}"
 
+    # ─── SIGNAL STRENGTH SCORING ──────────────────────────────────────
+    # Score from -5 (Strong Sell) to +5 (Strong Buy)
+    # Each signal contributes points in the bullish (+) or bearish (-) direction
+    score = 0
+
+    # MA50 x MA150 crossover (heaviest weight — long-term trend)
+    if result['ma50_150_signal']:
+        score += 2 if 'Bullish' in result['ma50_150_signal'] else -2
+
+    # MA20 x MA50 crossover (medium weight — medium-term momentum)
+    if result['ma20_50_signal']:
+        score += 1.5 if 'Bullish' in result['ma20_50_signal'] else -1.5
+
+    # RSI divergence (confirms trend reversal)
+    if result['rsi_divergence']:
+        score += 1.5 if 'Bullish' in result['rsi_divergence'] else -1.5
+
+    # MA alignment bonus: price > MA20 > MA50 > MA150 = strong uptrend
+    if result['ma20'] and result['ma50'] and result['ma150']:
+        if result['last_close'] > result['ma20'] > result['ma50'] > result['ma150']:
+            score += 1  # Perfect bullish alignment
+        elif result['last_close'] < result['ma20'] < result['ma50'] < result['ma150']:
+            score -= 1  # Perfect bearish alignment
+
+    # RSI extreme bonus
+    if result['last_rsi'] is not None:
+        if result['last_rsi'] > 80:
+            score -= 0.5  # Overbought warning
+        elif result['last_rsi'] < 20:
+            score += 0.5  # Oversold opportunity
+
+    # Determine rating label
+    score = round(score, 1)
+    if score >= 4:
+        rating = "Strong Buy"
+    elif score >= 2:
+        rating = "Buy"
+    elif score >= 0.5:
+        rating = "Weak Buy"
+    elif score <= -4:
+        rating = "Strong Sell"
+    elif score <= -2:
+        rating = "Sell"
+    elif score <= -0.5:
+        rating = "Weak Sell"
+    else:
+        rating = "Neutral"
+
+    result['score'] = score
+    result['rating'] = rating
+
     return result
 
 
@@ -345,6 +396,17 @@ def build_html_dashboard(all_results, output_path):
   .empty {{ text-align: center; padding: 40px; color: var(--muted); }}
   .count {{ color: var(--muted); font-size: 0.85em; margin-bottom: 12px; }}
   .footer {{ text-align: center; color: var(--muted); font-size: 0.8em; margin-top: 20px; padding: 16px; }}
+
+  .rating {{ padding: 4px 10px; border-radius: 6px; font-weight: 700; font-size: 0.8em;
+             display: inline-block; letter-spacing: 0.3px; white-space: nowrap; }}
+  .rating-strong-buy {{ background: #0d5f2c; color: #3fb950; border: 1px solid #238636; }}
+  .rating-buy {{ background: rgba(63,185,80,0.15); color: #3fb950; border: 1px solid rgba(63,185,80,0.3); }}
+  .rating-weak-buy {{ background: rgba(63,185,80,0.08); color: #7ee787; border: 1px solid rgba(63,185,80,0.15); }}
+  .rating-strong-sell {{ background: #5f0d0d; color: #f85149; border: 1px solid #da3633; }}
+  .rating-sell {{ background: rgba(248,81,73,0.15); color: #f85149; border: 1px solid rgba(248,81,73,0.3); }}
+  .rating-weak-sell {{ background: rgba(248,81,73,0.08); color: #ffa198; border: 1px solid rgba(248,81,73,0.15); }}
+  .rating-neutral {{ background: rgba(139,148,158,0.1); color: var(--muted); border: 1px solid var(--border); }}
+  .score-bar {{ display: inline-block; height: 6px; border-radius: 3px; margin-left: 6px; vertical-align: middle; }}
 </style>
 </head>
 <body>
@@ -387,6 +449,16 @@ def build_html_dashboard(all_results, output_path):
     </select>
   </div>
   <div class="filter-group">
+    <label>Rating</label>
+    <select id="ratingFilter" onchange="applyFilters()">
+      <option value="all">All Ratings</option>
+      <option value="strong_buy">Strong Buy</option>
+      <option value="buy">Buy / Strong Buy</option>
+      <option value="sell">Sell / Strong Sell</option>
+      <option value="strong_sell">Strong Sell</option>
+    </select>
+  </div>
+  <div class="filter-group">
     <label>Search Ticker</label>
     <input type="text" id="tickerSearch" placeholder="e.g. NVDA" oninput="applyFilters()">
   </div>
@@ -410,6 +482,8 @@ def build_html_dashboard(all_results, output_path):
       <th>Date</th>
       <th onclick="sortBy('last_rsi')">RSI <span class="sort-arrow" id="sort-last_rsi"></span></th>
       <th onclick="sortBy('combined_signal')">Combined <span class="sort-arrow" id="sort-combined_signal"></span></th>
+      <th onclick="sortBy('score')">Score <span class="sort-arrow" id="sort-score"></span></th>
+      <th onclick="sortBy('rating')">Rating <span class="sort-arrow" id="sort-rating"></span></th>
     </tr>
   </thead>
   <tbody id="tableBody"></tbody>
@@ -434,10 +508,24 @@ function tvLink(ticker) {{
   return `https://www.tradingview.com/chart/?symbol=NASDAQ:${{ticker}}`;
 }}
 
+function ratingClass(rating) {{
+  if (!rating) return 'rating-neutral';
+  return 'rating-' + rating.toLowerCase().replace(/\\s+/g, '-');
+}}
+
+function scoreBar(score) {{
+  if (score == null) return '';
+  const abs = Math.min(Math.abs(score), 5);
+  const width = abs * 12;
+  const color = score > 0 ? 'var(--green)' : score < 0 ? 'var(--red)' : 'var(--muted)';
+  return `<span class="score-bar" style="width:${{width}}px;background:${{color}}"></span>`;
+}}
+
 function applyFilters() {{
   const sig = document.getElementById('signalFilter').value;
   const dir = document.getElementById('directionFilter').value;
   const sec = document.getElementById('sectorFilter').value;
+  const rat = document.getElementById('ratingFilter').value;
   const search = document.getElementById('tickerSearch').value.toUpperCase().trim();
 
   filtered = DATA.filter(r => {{
@@ -457,6 +545,10 @@ function applyFilters() {{
               .filter(Boolean).some(s => s.includes('Bearish'));
       if (!b) return false;
     }}
+    if (rat === 'strong_buy' && r.rating !== 'Strong Buy') return false;
+    if (rat === 'buy' && r.score <= 0) return false;
+    if (rat === 'sell' && r.score >= 0) return false;
+    if (rat === 'strong_sell' && r.rating !== 'Strong Sell') return false;
     if (sec !== 'all' && (!r.sectors || !r.sectors.includes(sec))) return false;
     if (search && !r.ticker.includes(search)) return false;
     return true;
@@ -485,18 +577,19 @@ function sortData() {{
 }}
 
 function render() {{
-  let bullish = 0, bearish = 0, combined = 0;
+  let strongBuy = 0, buy = 0, strongSell = 0, sell = 0;
   filtered.forEach(r => {{
-    let signals = [r.ma50_150_signal, r.ma20_50_signal, r.rsi_divergence, r.combined_signal].filter(Boolean).join(' ');
-    if (signals.includes('Bullish')) bullish++;
-    if (signals.includes('Bearish')) bearish++;
-    if (r.combined_signal) combined++;
+    if (r.rating === 'Strong Buy') strongBuy++;
+    else if (r.rating === 'Buy' || r.rating === 'Weak Buy') buy++;
+    else if (r.rating === 'Strong Sell') strongSell++;
+    else if (r.rating === 'Sell' || r.rating === 'Weak Sell') sell++;
   }});
   document.getElementById('statsBar').innerHTML = `
     <div class="stat-card"><div class="num" style="color:var(--text)">${{filtered.length}}</div><div class="label">Stocks with Signals</div></div>
-    <div class="stat-card"><div class="num" style="color:var(--green)">${{bullish}}</div><div class="label">Bullish</div></div>
-    <div class="stat-card"><div class="num" style="color:var(--red)">${{bearish}}</div><div class="label">Bearish</div></div>
-    <div class="stat-card"><div class="num" style="color:var(--yellow)">${{combined}}</div><div class="label">Combined Signals</div></div>
+    <div class="stat-card"><div class="num" style="color:#3fb950">${{strongBuy}}</div><div class="label">Strong Buy</div></div>
+    <div class="stat-card"><div class="num" style="color:#7ee787">${{buy}}</div><div class="label">Buy</div></div>
+    <div class="stat-card"><div class="num" style="color:#ffa198">${{sell}}</div><div class="label">Sell</div></div>
+    <div class="stat-card"><div class="num" style="color:#f85149">${{strongSell}}</div><div class="label">Strong Sell</div></div>
   `;
   document.getElementById('resultCount').textContent = `Showing ${{filtered.length}} of ${{DATA.length}} stocks scanned`;
 
@@ -506,7 +599,7 @@ function render() {{
 
   const tbody = document.getElementById('tableBody');
   if (filtered.length === 0) {{
-    tbody.innerHTML = '<tr><td colspan="11" class="empty">No signals found for current filters</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="13" class="empty">No signals found for current filters</td></tr>';
     return;
   }}
   tbody.innerHTML = filtered.map(r => `
@@ -522,6 +615,8 @@ function render() {{
       <td style="color:var(--muted);font-size:0.85em">${{r.rsi_div_date || ''}}</td>
       <td style="color:${{r.last_rsi > 70 ? 'var(--red)' : r.last_rsi < 30 ? 'var(--green)' : 'var(--text)'}}">${{r.last_rsi != null ? r.last_rsi.toFixed(1) : '—'}}</td>
       <td>${{r.combined_signal ? `<span class="${{signalClass(r.combined_signal)}}">${{r.combined_signal}}</span>` : '—'}}</td>
+      <td style="text-align:center">${{r.score != null ? r.score.toFixed(1) : '—'}}${{scoreBar(r.score)}}</td>
+      <td><span class="rating ${{ratingClass(r.rating)}}">${{r.rating || '—'}}</span></td>
     </tr>
   `).join('');
 }}
