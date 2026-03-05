@@ -691,7 +691,9 @@ def send_email_alerts(results, output_dir):
         print("\nEmail alerts: skipped (RESEND_API_KEY not set)")
         return
     if not alert_to:
-        alert_to = 'studio@eyalburstein.com'
+        alert_to = 'studio@eyalburstein.com,varda101@gmail.com'
+    # Support multiple comma-separated recipients
+    recipients = [e.strip() for e in alert_to.split(',') if e.strip()]
 
     # Load previous signals
     prev_file = os.path.join(output_dir, 'previous_signals.json')
@@ -765,7 +767,7 @@ def send_email_alerts(results, output_dir):
     # Send via Resend API
     payload = json.dumps({
         "from": "NASDAQ Screener <onboarding@resend.dev>",
-        "to": [alert_to],
+        "to": recipients,
         "subject": subject,
         "html": html_body
     }).encode('utf-8')
@@ -781,7 +783,7 @@ def send_email_alerts(results, output_dir):
         )
         with urllib.request.urlopen(req, timeout=15) as resp:
             result = json.loads(resp.read().decode())
-        print(f"\nEmail alert sent to {alert_to} with {len(notable)} new signals (id: {result.get('id', '?')})")
+        print(f"\nEmail alert sent to {', '.join(recipients)} with {len(notable)} new signals (id: {result.get('id', '?')})")
     except Exception as e:
         print(f"\nEmail alert failed: {e}")
 
