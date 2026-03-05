@@ -682,17 +682,16 @@ applyFilters();
 # ─── EMAIL ALERTS ────────────────────────────────────────────────────────────
 def send_email_alerts(results, output_dir):
     """Send email if new Strong Buy or Strong Sell signals appear since last run."""
-    import smtplib
-    from email.mime.text import MIMEText
-    from email.mime.multipart import MIMEMultipart
+    import urllib.request
 
     # Check env vars — skip if not configured
-    smtp_user = os.environ.get('ALERT_EMAIL_FROM', '')
-    smtp_pass = os.environ.get('ALERT_EMAIL_PASSWORD', '')
+    resend_key = os.environ.get('RESEND_API_KEY', '')
     alert_to = os.environ.get('ALERT_EMAIL_TO', '')
-    if not (smtp_user and smtp_pass and alert_to):
-        print("\nEmail alerts: skipped (ALERT_EMAIL_FROM / ALERT_EMAIL_PASSWORD / ALERT_EMAIL_TO not set)")
+    if not resend_key:
+        print("\nEmail alerts: skipped (RESEND_API_KEY not set)")
         return
+    if not alert_to:
+        alert_to = 'studio@eyalburstein.com'
 
     # Load previous signals
     prev_file = os.path.join(output_dir, 'previous_signals.json')
@@ -761,18 +760,28 @@ def send_email_alerts(results, output_dir):
     body_lines.append(f"<p><a href='https://eburstz.github.io/nasdaq-screener/'>View Full Dashboard</a></p>")
 
     html_body = "\n".join(body_lines)
+    subject = f"Screener Alert: {len(notable)} new signals — {scan_date}"
 
-    msg = MIMEMultipart('alternative')
-    msg['Subject'] = f"Screener Alert: {len(notable)} new signals — {scan_date}"
-    msg['From'] = smtp_user
-    msg['To'] = alert_to
-    msg.attach(MIMEText(html_body, 'html'))
+    # Send via Resend API
+    payload = json.dumps({
+        "from": "NASDAQ Screener <onboarding@resend.dev>",
+        "to": [alert_to],
+        "subject": subject,
+        "html": html_body
+    }).encode('utf-8')
 
     try:
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
-            server.login(smtp_user, smtp_pass)
-            server.send_message(msg)
-        print(f"\nEmail alert sent to {alert_to} with {len(notable)} new signals")
+        req = urllib.request.Request(
+            "https://api.resend.com/emails",
+            data=payload,
+            headers={
+                "Authorization": f"Bearer {resend_key}",
+                "Content-Type": "application/json"
+            }
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            result = json.loads(resp.read().decode())
+        print(f"\nEmail alert sent to {alert_to} with {len(notable)} new signals (id: {result.get('id', '?')})")
     except Exception as e:
         print(f"\nEmail alert failed: {e}")
 
