@@ -1,6 +1,6 @@
-# NASDAQ Stock Screener
+# NASDAQ 100 Stock Screener
 
-Automated daily scanner that detects **MA crossovers** and **RSI divergences** across all NASDAQ-listed stocks. Results are published as an interactive HTML dashboard with direct TradingView chart links.
+Automated daily scanner that detects **MA crossovers** and **RSI divergences** across the **NASDAQ 100** index stocks. Results are published as an interactive HTML dashboard with direct TradingView chart links.
 
 ## Signals Detected
 
@@ -13,7 +13,7 @@ Automated daily scanner that detects **MA crossovers** and **RSI divergences** a
 
 ## Sector Filters
 
-- **All NASDAQ** (~3,300 stocks)
+- **NASDAQ 100** (100 stocks)
 - **Renewable Energy** (ENPH, FSLR, PLUG, etc.)
 - **Nuclear Energy** (CEG, CCJ, SMR, OKLO, etc.)
 - **AI Companies** (NVDA, AMD, PLTR, etc.)

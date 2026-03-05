@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-NASDAQ Stock Screener — Interactive Dashboard Edition
-Detects MA crossovers and RSI divergences across all NASDAQ-listed stocks.
+NASDAQ 100 Stock Screener — Interactive Dashboard Edition
+Detects MA crossovers and RSI divergences across the NASDAQ 100 index stocks.
 Outputs an interactive HTML dashboard with TradingView chart links.
 
 Signals:
@@ -96,42 +96,24 @@ for t in ASCHENBRENNER_TICKERS:
     SECTOR_MAP.setdefault(t, []).append("Aschenbrenner")
 
 
-# ─── TICKER LIST ──────────────────────────────────────────────────────────────
+# ─── NASDAQ 100 TICKERS ──────────────────────────────────────────────────────
+NASDAQ_100 = [
+    "AAPL", "ABNB", "ADBE", "ADI", "ADP", "ADSK", "AEP", "AMAT", "AMGN", "AMZN",
+    "ANSS", "APP", "ARM", "ASML", "AVGO", "AXON", "AZN", "BIIB", "BKNG", "BKR",
+    "CCEP", "CDNS", "CDW", "CEG", "CHTR", "CMCSA", "COIN", "COST", "CPRT", "CRWD",
+    "CSCO", "CTAS", "CTSH", "DASH", "DDOG", "DLTR", "DXCM", "EA", "EXC", "FANG",
+    "FAST", "FTNT", "GEHC", "GILD", "GOOG", "GOOGL", "GFS", "HON", "IDXX", "ILMN",
+    "INTC", "INTU", "ISRG", "KDP", "KHC", "KLAC", "LIN", "LRCX", "LULU", "MAR",
+    "MCHP", "MDB", "MDLZ", "MELI", "META", "MNST", "MRVL", "MSFT", "MU", "NFLX",
+    "NVDA", "NXPI", "ODFL", "ON", "ORLY", "PANW", "PAYX", "PCAR", "PDD", "PEP",
+    "PLTR", "PYPL", "QCOM", "REGN", "ROST", "SBUX", "SMCI", "SNPS", "TEAM", "TOST",
+    "TSLA", "TTD", "TTWO", "TXN", "VRSK", "VRTX", "WBD", "WDAY", "XEL", "ZS",
+]
+
 def get_nasdaq_tickers():
-    """Fetch all NASDAQ-listed tickers."""
-    print("Fetching NASDAQ ticker list...")
-    try:
-        url = "https://raw.githubusercontent.com/rreichel3/US-Stock-Symbols/main/nasdaq/nasdaq_tickers.txt"
-        tickers = pd.read_csv(url, header=None)[0].tolist()
-        tickers = [t.strip() for t in tickers if t.strip().isalpha() and len(t.strip()) <= 5]
-        print(f"  Found {len(tickers)} NASDAQ tickers")
-        return tickers
-    except Exception as e:
-        print(f"  Primary source failed ({e}), trying backup...")
-        try:
-            import urllib.request
-            url = "https://api.nasdaq.com/api/screener/stocks?tableType=traded&exchange=NASDAQ&download=true"
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                data = json.loads(resp.read().decode())
-            tickers = [row['symbol'] for row in data['data']['rows']
-                       if row['symbol'].isalpha() and len(row['symbol']) <= 5]
-            print(f"  Found {len(tickers)} NASDAQ tickers (backup)")
-            return tickers
-        except Exception as e2:
-            print(f"  Backup also failed ({e2}), using fallback set (~170 tickers)")
-            return list(set(
-                ["AAPL","MSFT","GOOG","GOOGL","AMZN","NVDA","META","TSLA","AVGO","PEP",
-                 "COST","ADBE","CSCO","NFLX","CMCSA","AMD","INTC","INTU","TXN","QCOM",
-                 "AMGN","AMAT","BKNG","ISRG","MDLZ","ADI","REGN","VRTX","LRCX","PANW",
-                 "MU","SNPS","KLAC","CDNS","MELI","CRWD","ABNB","FTNT","DASH","MNST",
-                 "ORLY","KDP","NXPI","MCHP","CTAS","KHC","DXCM","AEP","ON","ROST",
-                 "CPRT","PAYX","FAST","ODFL","EXC","EA","VRSK","CTSH","XEL","GEHC",
-                 "IDXX","ZS","ANSS","CDW","DDOG","TEAM","BKR","FANG","ILMN","WBD",
-                 "MRNA","DLTR","BIIB","SIRI","LCID","RIVN","ZM","ROKU","SNAP","PINS",
-                 "PLTR","COIN","HOOD","MARA","RIOT","SQ","PYPL","SOFI","AFRM","NU"]
-                + RENEWABLE_ENERGY_TICKERS + NUCLEAR_ENERGY_TICKERS + AI_TICKERS
-            ))
+    """Return NASDAQ 100 index tickers."""
+    print(f"Using NASDAQ 100 ({len(NASDAQ_100)} tickers)")
+    return list(NASDAQ_100)
 
 
 # ─── TECHNICAL INDICATORS ────────────────────────────────────────────────────
