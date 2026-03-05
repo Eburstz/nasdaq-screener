@@ -1,4 +1,4 @@
-name: NASDAQ Screener
+name: NASDAQ 100 Screener
 
 on:
   # Run daily at 9:30 PM UTC (4:30 PM ET — 30 min after market close)
@@ -14,7 +14,7 @@ permissions:
 jobs:
   scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     steps:
       - name: Checkout repo
@@ -29,12 +29,16 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run screener
+        env:
+          ALERT_EMAIL_FROM: ${{ secrets.ALERT_EMAIL_FROM }}
+          ALERT_EMAIL_PASSWORD: ${{ secrets.ALERT_EMAIL_PASSWORD }}
+          ALERT_EMAIL_TO: ${{ secrets.ALERT_EMAIL_TO }}
         run: python nasdaq_screener.py docs/index.html
 
       - name: Commit and push results
         run: |
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
-          git add docs/index.html
+          git add docs/index.html previous_signals.json
           git diff --staged --quiet || git commit -m "Update screener dashboard — $(date +'%Y-%m-%d %H:%M UTC')"
           git push

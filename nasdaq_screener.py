@@ -39,6 +39,15 @@ COMBO_WINDOW = 10          # Days window to match crossover + divergence
 BATCH_SIZE = 50            # Tickers per yfinance batch download
 DELAY_BETWEEN_BATCHES = 1  # Seconds between batches
 
+# ─── TIMEFRAMES ──────────────────────────────────────────────────────────────
+# Each timeframe: (label, yfinance_interval, yfinance_period_or_days, min_bars_needed)
+TIMEFRAMES = [
+    ("4H",      "1h",  60,   200),   # 4H built from 1h data (60 days of 1h ≈ lots of 4H bars)
+    ("Daily",   "1d",  400,  200),
+    ("Weekly",  "1wk", 1200, 200),
+    ("Monthly", "1mo", 3600, 50),
+]
+
 # ─── SECTOR TICKER LISTS ─────────────────────────────────────────────────────
 # You can add or remove tickers here to customize sector filters
 RENEWABLE_ENERGY_TICKERS = [
@@ -269,12 +278,20 @@ def analyze_ticker(ticker, hist):
     return result
 
 
-def download_and_analyze(tickers, label="All NASDAQ"):
+def resample_to_4h(df_1h):
+    """Resample 1-hour data to 4-hour bars."""
+    ohlc = df_1h.resample('4h').agg({
+        'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last', 'Volume': 'sum'
+    }).dropna()
+    return ohlc
+
+
+def download_and_analyze(tickers, label="All NASDAQ", interval="1d", lookback_days=400, min_bars=200, timeframe_label="Daily"):
     results = []
     total = len(tickers)
-    start_date = (datetime.now() - timedelta(days=LOOKBACK_DAYS)).strftime('%Y-%m-%d')
+    start_date = (datetime.now() - timedelta(days=lookback_days)).strftime('%Y-%m-%d')
     end_date = datetime.now().strftime('%Y-%m-%d')
-    print(f"\nScanning {total} tickers for [{label}]...")
+    print(f"\nScanning {total} tickers for [{label}] on {timeframe_label}...")
 
     for i in range(0, total, BATCH_SIZE):
         batch = tickers[i:i+BATCH_SIZE]
@@ -283,7 +300,7 @@ def download_and_analyze(tickers, label="All NASDAQ"):
         print(f"  Batch {batch_num}/{total_batches} ({len(batch)} tickers)...", end=" ", flush=True)
         try:
             data = yf.download(batch, start=start_date, end=end_date,
-                               group_by='ticker', progress=False, threads=True)
+                               interval=interval, group_by='ticker', progress=False, threads=True)
         except Exception as e:
             print(f"Error: {e}")
             time.sleep(DELAY_BETWEEN_BATCHES)
@@ -293,8 +310,14 @@ def download_and_analyze(tickers, label="All NASDAQ"):
             try:
                 hist = data if len(batch) == 1 else data[ticker].dropna()
                 if hist is not None and len(hist) > 0:
+                    # Resample to 4H if needed
+                    if timeframe_label == "4H":
+                        hist = resample_to_4h(hist)
+                    if len(hist) < min_bars:
+                        continue
                     result = analyze_ticker(ticker, hist)
                     if result:
+                        result['timeframe'] = timeframe_label
                         results.append(result)
             except Exception:
                 pass
@@ -347,7 +370,10 @@ def build_html_dashboard(all_results, output_path):
 
   .stats {{ display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }}
   .stat-card {{ padding: 16px 20px; background: var(--surface); border: 1px solid var(--border);
-                border-radius: 10px; flex: 1; min-width: 140px; text-align: center; }}
+                border-radius: 10px; flex: 1; min-width: 140px; text-align: center;
+                cursor: pointer; transition: border-color 0.2s, transform 0.1s; }}
+  .stat-card:hover {{ border-color: var(--accent); transform: translateY(-1px); }}
+  .stat-card.active {{ border-color: var(--accent); box-shadow: 0 0 8px rgba(88,166,255,0.2); }}
   .stat-card .num {{ font-size: 1.8em; font-weight: 700; }}
   .stat-card .label {{ color: var(--muted); font-size: 0.8em; margin-top: 4px; }}
 
@@ -395,13 +421,23 @@ def build_html_dashboard(all_results, output_path):
 
 <div class="header">
   <div>
-    <h1>NASDAQ Stock Screener</h1>
+    <h1>NASDAQ 100 Screener</h1>
     <div class="meta">MA Crossovers &amp; RSI Divergences &bull; Click any ticker to open in TradingView</div>
   </div>
   <div class="meta">Scanned: {scan_date}</div>
 </div>
 
 <div class="controls">
+  <div class="filter-group">
+    <label>Timeframe</label>
+    <select id="timeframeFilter" onchange="applyFilters()">
+      <option value="all">All Timeframes</option>
+      <option value="4H">4H</option>
+      <option value="Daily" selected>Daily</option>
+      <option value="Weekly">Weekly</option>
+      <option value="Monthly">Monthly</option>
+    </select>
+  </div>
   <div class="filter-group">
     <label>Signal Type</label>
     <select id="signalFilter" onchange="applyFilters()">
@@ -454,6 +490,7 @@ def build_html_dashboard(all_results, output_path):
   <thead>
     <tr>
       <th onclick="sortBy('ticker')">Ticker <span class="sort-arrow" id="sort-ticker"></span></th>
+      <th onclick="sortBy('timeframe')">TF <span class="sort-arrow" id="sort-timeframe"></span></th>
       <th onclick="sortBy('last_close')">Price <span class="sort-arrow" id="sort-last_close"></span></th>
       <th>Sectors</th>
       <th onclick="sortBy('ma50_150_signal')">MA50 x MA150 <span class="sort-arrow" id="sort-ma50_150_signal"></span></th>
@@ -503,7 +540,13 @@ function scoreBar(score) {{
   return `<span class="score-bar" style="width:${{width}}px;background:${{color}}"></span>`;
 }}
 
+function filterByCard(rating) {{
+  document.getElementById('ratingFilter').value = rating;
+  applyFilters();
+}}
+
 function applyFilters() {{
+  const tf = document.getElementById('timeframeFilter').value;
   const sig = document.getElementById('signalFilter').value;
   const dir = document.getElementById('directionFilter').value;
   const sec = document.getElementById('sectorFilter').value;
@@ -511,6 +554,7 @@ function applyFilters() {{
   const search = document.getElementById('tickerSearch').value.toUpperCase().trim();
 
   filtered = DATA.filter(r => {{
+    if (tf !== 'all' && r.timeframe !== tf) return false;
     let hasSignal = r.ma50_150_signal || r.ma20_50_signal || r.rsi_divergence || r.combined_signal;
     if (!hasSignal) return false;
     if (sig === 'ma50_150' && !r.ma50_150_signal) return false;
@@ -566,12 +610,13 @@ function render() {{
     else if (r.rating === 'Strong Sell') strongSell++;
     else if (r.rating === 'Sell' || r.rating === 'Weak Sell') sell++;
   }});
+  const activeRat = document.getElementById('ratingFilter').value;
   document.getElementById('statsBar').innerHTML = `
-    <div class="stat-card"><div class="num" style="color:var(--text)">${{filtered.length}}</div><div class="label">Stocks with Signals</div></div>
-    <div class="stat-card"><div class="num" style="color:#3fb950">${{strongBuy}}</div><div class="label">Strong Buy</div></div>
-    <div class="stat-card"><div class="num" style="color:#7ee787">${{buy}}</div><div class="label">Buy</div></div>
-    <div class="stat-card"><div class="num" style="color:#ffa198">${{sell}}</div><div class="label">Sell</div></div>
-    <div class="stat-card"><div class="num" style="color:#f85149">${{strongSell}}</div><div class="label">Strong Sell</div></div>
+    <div class="stat-card ${{activeRat==='all'?'active':''}}" onclick="filterByCard('all')"><div class="num" style="color:var(--text)">${{filtered.length}}</div><div class="label">Stocks with Signals</div></div>
+    <div class="stat-card ${{activeRat==='strong_buy'?'active':''}}" onclick="filterByCard('strong_buy')"><div class="num" style="color:#3fb950">${{strongBuy}}</div><div class="label">Strong Buy</div></div>
+    <div class="stat-card ${{activeRat==='buy'?'active':''}}" onclick="filterByCard('buy')"><div class="num" style="color:#7ee787">${{buy}}</div><div class="label">Buy</div></div>
+    <div class="stat-card ${{activeRat==='sell'?'active':''}}" onclick="filterByCard('sell')"><div class="num" style="color:#ffa198">${{sell}}</div><div class="label">Sell</div></div>
+    <div class="stat-card ${{activeRat==='strong_sell'?'active':''}}" onclick="filterByCard('strong_sell')"><div class="num" style="color:#f85149">${{strongSell}}</div><div class="label">Strong Sell</div></div>
   `;
   document.getElementById('resultCount').textContent = `Showing ${{filtered.length}} of ${{DATA.length}} stocks scanned`;
 
@@ -581,12 +626,13 @@ function render() {{
 
   const tbody = document.getElementById('tableBody');
   if (filtered.length === 0) {{
-    tbody.innerHTML = '<tr><td colspan="13" class="empty">No signals found for current filters</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="14" class="empty">No signals found for current filters</td></tr>';
     return;
   }}
   tbody.innerHTML = filtered.map(r => `
     <tr>
       <td><a class="ticker-link" href="${{tvLink(r.ticker)}}" target="_blank" title="Open ${{r.ticker}} in TradingView">${{r.ticker}}</a></td>
+      <td style="color:var(--muted);font-size:0.85em">${{r.timeframe || 'Daily'}}</td>
       <td>${{r.last_close != null ? '$' + r.last_close.toFixed(2) : '—'}}</td>
       <td>${{(r.sectors || []).map(s => `<span class="sector-tag sector-${{s}}">${{s}}</span>`).join('') || '—'}}</td>
       <td>${{r.ma50_150_signal ? `<span class="${{signalClass(r.ma50_150_signal)}}">${{r.ma50_150_signal}}</span>` : '—'}}</td>
@@ -612,27 +658,135 @@ applyFilters();
     print(f"\nDashboard saved: {output_path}")
 
 
+# ─── EMAIL ALERTS ────────────────────────────────────────────────────────────
+def send_email_alerts(results, output_dir):
+    """Send email if new Strong Buy or Strong Sell signals appear since last run."""
+    import smtplib
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+
+    # Check env vars — skip if not configured
+    smtp_user = os.environ.get('ALERT_EMAIL_FROM', '')
+    smtp_pass = os.environ.get('ALERT_EMAIL_PASSWORD', '')
+    alert_to = os.environ.get('ALERT_EMAIL_TO', '')
+    if not (smtp_user and smtp_pass and alert_to):
+        print("\nEmail alerts: skipped (ALERT_EMAIL_FROM / ALERT_EMAIL_PASSWORD / ALERT_EMAIL_TO not set)")
+        return
+
+    # Load previous signals
+    prev_file = os.path.join(output_dir, 'previous_signals.json')
+    prev_keys = set()
+    if os.path.exists(prev_file):
+        try:
+            with open(prev_file) as f:
+                prev_keys = set(json.load(f))
+        except Exception:
+            pass
+
+    # Find notable signals (Strong Buy / Strong Sell on Daily timeframe primarily)
+    notable = []
+    current_keys = []
+    for r in results:
+        has_signal = r.get('ma50_150_signal') or r.get('ma20_50_signal') or r.get('rsi_divergence')
+        if not has_signal:
+            continue
+        key = f"{r['ticker']}_{r.get('timeframe','Daily')}_{r.get('rating','')}"
+        current_keys.append(key)
+        if key not in prev_keys and r.get('rating') in ('Strong Buy', 'Strong Sell', 'Buy', 'Sell'):
+            notable.append(r)
+
+    # Save current keys for next run
+    with open(prev_file, 'w') as f:
+        json.dump(current_keys, f)
+
+    if not notable:
+        print(f"\nEmail alerts: no new notable signals to report")
+        return
+
+    # Build email body
+    scan_date = datetime.now().strftime('%Y-%m-%d %H:%M')
+    strong_buys = [r for r in notable if r.get('rating') in ('Strong Buy', 'Buy')]
+    strong_sells = [r for r in notable if r.get('rating') in ('Strong Sell', 'Sell')]
+
+    body_lines = [f"<h2>NASDAQ 100 Screener Alert — {scan_date}</h2>"]
+    body_lines.append(f"<p>{len(notable)} new signal(s) detected.</p>")
+
+    if strong_buys:
+        body_lines.append("<h3 style='color:#3fb950'>New Buy Signals</h3><ul>")
+        for r in strong_buys:
+            tf = r.get('timeframe', 'Daily')
+            ticker = r['ticker']
+            tv_url = f"https://www.tradingview.com/chart/?symbol=NASDAQ:{ticker}"
+            body_lines.append(
+                f"<li><b>{ticker}</b> ({tf}) — {r['rating']} (score: {r.get('score', 0):.1f}) "
+                f"| Price: ${r.get('last_close', 0):.2f} "
+                f"<a href='{tv_url}'>TradingView</a></li>"
+            )
+        body_lines.append("</ul>")
+
+    if strong_sells:
+        body_lines.append("<h3 style='color:#f85149'>New Sell Signals</h3><ul>")
+        for r in strong_sells:
+            tf = r.get('timeframe', 'Daily')
+            ticker = r['ticker']
+            tv_url = f"https://www.tradingview.com/chart/?symbol=NASDAQ:{ticker}"
+            body_lines.append(
+                f"<li><b>{ticker}</b> ({tf}) — {r['rating']} (score: {r.get('score', 0):.1f}) "
+                f"| Price: ${r.get('last_close', 0):.2f} "
+                f"<a href='{tv_url}'>TradingView</a></li>"
+            )
+        body_lines.append("</ul>")
+
+    body_lines.append(f"<p><a href='https://eburstz.github.io/nasdaq-screener/'>View Full Dashboard</a></p>")
+
+    html_body = "\n".join(body_lines)
+
+    msg = MIMEMultipart('alternative')
+    msg['Subject'] = f"Screener Alert: {len(notable)} new signals — {scan_date}"
+    msg['From'] = smtp_user
+    msg['To'] = alert_to
+    msg.attach(MIMEText(html_body, 'html'))
+
+    try:
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
+            server.login(smtp_user, smtp_pass)
+            server.send_message(msg)
+        print(f"\nEmail alert sent to {alert_to} with {len(notable)} new signals")
+    except Exception as e:
+        print(f"\nEmail alert failed: {e}")
+
+
 # ─── MAIN ─────────────────────────────────────────────────────────────────────
 def main():
     print("=" * 60)
-    print("  NASDAQ STOCK SCREENER")
+    print("  NASDAQ 100 STOCK SCREENER — Multi-Timeframe")
     print(f"  {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     print("=" * 60)
 
-    all_tickers = get_nasdaq_tickers()
-    all_results = download_and_analyze(all_tickers, "All NASDAQ")
+    base_tickers = get_nasdaq_tickers()
 
-    # Ensure sector tickers are included even if not in main list
-    already = {r['ticker'] for r in all_results}
-    for extra_list, label in [(RENEWABLE_ENERGY_TICKERS, "Renewable"),
-                              (NUCLEAR_ENERGY_TICKERS, "Nuclear"),
-                              (AI_TICKERS, "AI"),
-                              (ASCHENBRENNER_TICKERS, "Aschenbrenner")]:
-        missing = [t for t in extra_list if t not in already]
-        if missing:
-            extra = download_and_analyze(missing, f"{label} (extra)")
-            all_results.extend(extra)
-            already.update(r['ticker'] for r in extra)
+    # Collect all sector extras that aren't already in NASDAQ 100
+    base_set = set(base_tickers)
+    extra_tickers = []
+    for extra_list in [RENEWABLE_ENERGY_TICKERS, NUCLEAR_ENERGY_TICKERS, AI_TICKERS, ASCHENBRENNER_TICKERS]:
+        for t in extra_list:
+            if t not in base_set:
+                extra_tickers.append(t)
+                base_set.add(t)
+
+    all_tickers = base_tickers + extra_tickers
+    all_results = []
+
+    for tf_label, tf_interval, tf_days, tf_min_bars in TIMEFRAMES:
+        print(f"\n{'─'*40}")
+        print(f"  Timeframe: {tf_label}")
+        print(f"{'─'*40}")
+        tf_results = download_and_analyze(
+            all_tickers, f"NASDAQ 100 + Sectors",
+            interval=tf_interval, lookback_days=tf_days,
+            min_bars=tf_min_bars, timeframe_label=tf_label
+        )
+        all_results.extend(tf_results)
 
     # Output
     output_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
@@ -648,6 +802,9 @@ def main():
     print(f"  DONE: {len(all_results)} stocks scanned, {len(has_any)} with signals")
     print(f"  Open NASDAQ_Screener_Dashboard.html in your browser.")
     print(f"{'='*60}")
+
+    # ─── EMAIL ALERTS ──────────────────────────────────────────────────
+    send_email_alerts(all_results, output_dir)
 
 
 if __name__ == "__main__":
